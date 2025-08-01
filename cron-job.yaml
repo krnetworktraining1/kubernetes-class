@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crictl-config
+  namespace: kube-system
+data:
+  crictl.yaml: |
+    runtime-endpoint: unix:///var/run/crio/crio.sock
+    image-endpoint: unix:///var/run/crio/crio.sock
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: image-prune-crio
+  namespace: kube-system
+spec:
+  schedule: "* * * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostPID: true
+          containers:
+          - name: prune-images
+            image: docker.io/ramprakashupadhyay123/crictl
+            command: ["/bin/sh", "-c"]
+            args:
+              - crictl rmi --prune
+            securityContext:
+              privileged: true
+            env:
+            - name: CRI_CONFIG_FILE
+              value: /etc/crictl.yaml
+            volumeMounts:
+            - name: crictl-config
+              mountPath: /etc/crictl.yaml
+              subPath: crictl.yaml
+            - name: var-run-crio
+              mountPath: /var/run/crio
+          restartPolicy: OnFailure
+          volumes:
+          - name: crictl-config
+            configMap:
+              name: crictl-config
+          - name: var-run-crio
+            hostPath:
+              path: /var/run/crio
+              type: Directory
